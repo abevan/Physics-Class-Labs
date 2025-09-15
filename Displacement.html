@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Chosen Palette: Futuristic Neon -->
+    <!-- Application Structure Plan: The application now features two distinct, tab-based labs. Lab 1 ("Displacement Challenge") is a 2D, free-form vector challenge. Lab 2 ("1D Motion Lab") is a guided, one-dimensional challenge on a number line. This structure allows for a scaffolded learning experience, starting with the foundational 2D concept and then applying it to the more specific case of 1D motion with positive/negative directions. -->
+    <!-- Visualization & Content Choices: 
+        - [Lab 1: Displacement Challenge] - Now includes a guided path instruction (e.g., House -> Pin -> Finish) and labels on the icons to match the instruction. Final calculations are moved to a dedicated card below the canvas for consistency with Lab 2.
+        - [Lab 2: 1D Motion Lab]
+        - Report Info: A fixed number line with four points. Goal: Provide a structured environment. Viz: A horizontal line with tick marks and icon waypoints (A,B,C,D) rendered on a canvas. Justification: Directly replicates the common textbook problem of 1D kinematics. Library: Vanilla JS Canvas API.
+        - Report Info: A randomly generated path (e.g., A -> C -> B). Goal: Challenge/Guide. Viz: A text-based instruction above the canvas. Interaction: A new challenge is generated with the "New Challenge" button. Justification: Provides replayability and tests understanding across various scenarios (e.g., moving back and forth). Library: Vanilla JS.
+        - Report Info: User's progress along the path. Goal: Interact/Solve. Viz: Solid arrows drawn above the number line for distance, and a dashed vector below for displacement. Interaction: User clicks the start, middle, and end points in the specified order. A glowing effect confirms correct clicks. Justification: Provides clear, conceptually accurate visual feedback on the path taken.
+        - CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Physics Lab: Displacement Challenge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            background-color: #0f172a;
+            overflow-x: hidden;
+        }
+        canvas {
+            touch-action: none;
+        }
+        #physicsCanvas { cursor: crosshair; }
+        #oneDCanvas { cursor: pointer; }
+
+        .glowing-box {
+            position: relative;
+        }
+        .glowing-box::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 16px;
+            padding: 2px;
+            background: linear-gradient(45deg, #6366f1, #a855f7);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            z-index: -1;
+            animation: glow 5s linear infinite;
+        }
+        @keyframes glow {
+            0% { filter: hue-rotate(0deg); }
+            100% { filter: hue-rotate(360deg); }
+        }
+        .button-glow-light {
+            position: relative;
+            z-index: 10;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        .button-glow-light::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 300%;
+            height: 300%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+            transform: translate(-50%, -50%) scale(0);
+            transition: transform 0.5s ease;
+        }
+        .button-glow-light:hover::before {
+            transform: translate(-50%, -50%) scale(1);
+        }
+        .draw-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255, 255, 255, 0.2);
+            font-size: 2rem;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 5;
+            transition: opacity 0.5s ease-in-out;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+        }
+        .lab-canvas {
+            background-size: 20px 20px;
+            background-image: linear-gradient(to right, #273347 1px, transparent 1px),
+                              linear-gradient(to bottom, #273347 1px, transparent 1px);
+            animation: grid-pulse 10s infinite linear;
+        }
+        @keyframes grid-pulse {
+            0% { background-position: 0 0; }
+            100% { background-position: 20px 20px; }
+        }
+        .floating-blob {
+            position: absolute;
+            background: rgba(147, 51, 234, 0.5);
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.5;
+            animation: float-up 15s infinite ease-in-out;
+            z-index: 0;
+        }
+        .floating-blob.one {
+            width: 300px;
+            height: 300px;
+            top: -50px;
+            left: -50px;
+            animation-duration: 18s;
+        }
+        .floating-blob.two {
+            width: 200px;
+            height: 200px;
+            bottom: -50px;
+            right: -50px;
+            animation-duration: 22s;
+            animation-delay: -5s;
+        }
+        @keyframes float-up {
+            0% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-50px) scale(1.1); }
+            100% { transform: translateY(0) scale(1); }
+        }
+        .tab-button {
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-weight: 600;
+            transition: all 0.2s ease-in-out;
+            border: 2px solid transparent;
+        }
+        .tab-button.active {
+            background-color: #4f46e5;
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
+        }
+        .tab-button.inactive {
+            background-color: #1f2937;
+            color: #d1d5db;
+        }
+        .tab-button:hover {
+            border-color: #4f46e5;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .shake-animation {
+            animation: shake 0.3s ease-in-out;
+        }
+        @keyframes fade-in-up {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .calculation-card {
+            animation: fade-in-up 0.5s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="text-white flex flex-col items-center justify-start min-h-screen p-4">
+    <div class="floating-blob one"></div>
+    <div class="floating-blob two"></div>
+
+    <div class="max-w-4xl w-full flex flex-col items-center justify-center gap-6 relative z-10">
+        
+        <div class="flex gap-2 p-2 bg-gray-800 rounded-full shadow-lg">
+            <button id="tab1Btn" class="tab-button active">Displacement Challenge</button>
+            <button id="tab2Btn" class="tab-button inactive">1D Motion Lab</button>
+        </div>
+
+        <div id="tab1Content" class="w-full flex flex-col items-center">
+            <h1 class="text-3xl sm:text-4xl font-extrabold text-white mb-2 text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
+                Displacement Challenge
+            </h1>
+             <div id="displacement-task" class="text-center text-lg font-semibold bg-gray-800 p-3 rounded-lg my-4 border border-gray-700">
+                Your task will appear here.
+            </div>
+            <div class="flex flex-col sm:flex-row gap-4 mb-6 text-center w-full">
+                <div class="bg-gray-800 p-4 rounded-2xl shadow-xl flex-1 border-t border-gray-700 glowing-box">
+                    <h2 class="text-xl font-bold text-gray-300">Total Distance (Scalar)</h2>
+                    <p id="distance" class="text-2xl font-mono text-blue-400 mt-2">0.00</p>
+                </div>
+                <div class="bg-gray-800 p-4 rounded-2xl shadow-xl flex-1 border-t border-gray-700 glowing-box">
+                    <h2 class="text-xl font-bold text-gray-300">Displacement (Vector)</h2>
+                    <p id="displacement" class="text-2xl font-mono text-red-400 mt-2">0.00</p>
+                </div>
+            </div>
+            <div class="w-full aspect-video bg-gray-800 rounded-2xl shadow-2xl relative overflow-hidden glowing-box">
+                <canvas id="physicsCanvas" class="absolute inset-0 w-full h-full lab-canvas"></canvas>
+                <div id="drawLabel" class="draw-label opacity-0 pointer-events-none">Connect the Dots!</div>
+            </div>
+            <div id="displacement-calculations" class="w-full mt-4 hidden">
+                <div class="bg-gray-800/50 backdrop-blur-sm p-6 rounded-2xl border border-gray-700 glowing-box w-full">
+                    <h2 class="text-2xl font-bold text-center mb-4 text-gray-200">Final Calculations</h2>
+                    <div id="displacement-calc-content" class="flex flex-col md:flex-row gap-6 justify-center">
+                    </div>
+                </div>
+            </div>
+            <div class="mt-6 flex flex-wrap justify-center gap-4">
+                <button id="clearBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-full transition-all shadow-md button-glow-light">
+                    <span class="mr-2">🔄</span>New Challenge
+                </button>
+            </div>
+        </div>
+
+        <div id="tab2Content" class="w-full flex-col items-center hidden">
+             <h1 class="text-3xl sm:text-4xl font-extrabold text-white mb-2 text-center text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-cyan-400">
+                1D Motion Lab
+            </h1>
+            <div id="oneD-task" class="text-center text-lg font-semibold bg-gray-800 p-3 rounded-lg my-4 border border-gray-700">
+                Your task will appear here.
+            </div>
+            <div class="flex flex-col sm:flex-row gap-4 mb-6 text-center w-full">
+                <div class="bg-gray-800 p-4 rounded-2xl shadow-xl flex-1 border-t border-gray-700 glowing-box">
+                    <h2 class="text-xl font-bold text-gray-300">Total Distance</h2>
+                    <p id="oneD-distance" class="text-2xl font-mono text-green-400 mt-2">0.00 m</p>
+                </div>
+                <div class="bg-gray-800 p-4 rounded-2xl shadow-xl flex-1 border-t border-gray-700 glowing-box">
+                    <h2 class="text-xl font-bold text-gray-300">Displacement</h2>
+                    <p id="oneD-displacement" class="text-2xl font-mono text-cyan-400 mt-2">0.00 m</p>
+                </div>
+            </div>
+            <div class="w-full aspect-video bg-gray-800 rounded-2xl shadow-2xl relative overflow-hidden glowing-box">
+                <canvas id="oneDCanvas" class="absolute inset-0 w-full h-full lab-canvas"></canvas>
+            </div>
+             <div id="oneD-calculations" class="w-full mt-4 hidden">
+                <div class="bg-gray-800/50 backdrop-blur-sm p-6 rounded-2xl border border-gray-700 glowing-box w-full">
+                    <h2 class="text-2xl font-bold text-center mb-4 text-gray-200">Final Calculations</h2>
+                    <div id="oneD-calc-content" class="flex flex-col md:flex-row gap-6 justify-center">
+                    </div>
+                </div>
+            </div>
+            <div class="mt-6 flex flex-wrap justify-center gap-4">
+                <button id="oneD-clearBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-full transition-all shadow-md button-glow-light">
+                    <span class="mr-2">🔄</span>New Challenge
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- TAB SWITCHING LOGIC ---
+        const tab1Btn = document.getElementById('tab1Btn');
+        const tab2Btn = document.getElementById('tab2Btn');
+        const tab1Content = document.getElementById('tab1Content');
+        const tab2Content = document.getElementById('tab2Content');
+        let mainAnimFrame, oneDAnimFrame;
+
+        function switchTab(activeTab) {
+            cancelAnimationFrame(mainAnimFrame);
+            cancelAnimationFrame(oneDAnimFrame);
+
+            if (activeTab === 1) {
+                tab1Btn.classList.add('active');
+                tab1Btn.classList.remove('inactive');
+                tab2Btn.classList.add('inactive');
+                tab2Btn.classList.remove('active');
+                tab1Content.classList.remove('hidden');
+                tab1Content.classList.add('flex');
+                tab2Content.classList.add('hidden');
+                tab2Content.classList.remove('flex');
+                resizeMainCanvas(true);
+                mainLoop();
+            } else {
+                tab2Btn.classList.add('active');
+                tab2Btn.classList.remove('inactive');
+                tab1Btn.classList.add('inactive');
+                tab1Btn.classList.remove('active');
+                tab2Content.classList.remove('hidden');
+                tab2Content.classList.add('flex');
+                tab1Content.classList.add('hidden');
+                tab1Content.classList.remove('flex');
+                resizeOneDCanvas(true);
+                oneDLoop();
+            }
+        }
+        tab1Btn.addEventListener('click', () => switchTab(1));
+        tab2Btn.addEventListener('click', () => switchTab(2));
+        
+        // --- TAB 1: DISPLACEMENT CHALLENGE ---
+        const mainCanvas = document.getElementById('physicsCanvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        const distanceEl = document.getElementById('distance');
+        const displacementEl = document.getElementById('displacement');
+        const clearBtn = document.getElementById('clearBtn');
+        const drawLabel = document.getElementById('drawLabel');
+        const displacementTaskEl = document.getElementById('displacement-task');
+        const displacementCalculationsEl = document.getElementById('displacement-calculations');
+        const displacementCalcContentEl = document.getElementById('displacement-calc-content');
+        const mainScaleFactor = 0.05;
+        const snapRadius = 30;
+        const iconNames = ['House', 'Pin', 'Finish'];
+        
+        let isMainDrawing = false;
+        let drawnPoints = [];
+        let targetPoints = [];
+        let currentDragPoint = null;
+        let isChallengeComplete = false;
+
+        function resizeMainCanvas(forceNewChallenge = false) {
+            if (!mainCanvas.parentElement || mainCanvas.offsetWidth === 0) return;
+            mainCanvas.width = mainCanvas.offsetWidth;
+            mainCanvas.height = mainCanvas.offsetHeight;
+            if (forceNewChallenge) generateTrianglePoints();
+        }
+
+        function generateTrianglePoints() {
+            isChallengeComplete = false;
+            displacementCalculationsEl.classList.add('hidden');
+            displacementTaskEl.innerHTML = `Connect the path: <span class="font-bold text-yellow-400">${iconNames[0]} → ${iconNames[1]} → ${iconNames[2]}</span>`;
+            const padding = 80;
+            const minLegSize = Math.max(100, mainCanvas.width * 0.25);
+            const availableWidth = mainCanvas.width - padding * 2;
+            const availableHeight = mainCanvas.height - padding * 2;
+
+            if (availableWidth < minLegSize || availableHeight < minLegSize) {
+                targetPoints = []; drawnPoints = [];
+                drawLabel.textContent = "Screen is too small!";
+                drawLabel.classList.remove('opacity-0'); return;
+            } else {
+                 drawLabel.textContent = "Connect the Dots!";
+                 drawLabel.classList.add('opacity-0', 'pointer-events-none');
+            }
+
+            const legX = minLegSize + Math.random() * (availableWidth - minLegSize);
+            const legY = minLegSize + Math.random() * (availableHeight - minLegSize);
+            const startX = padding + Math.random() * (availableWidth - legX);
+            const startY = padding + Math.random() * (availableHeight - legY);
+            
+            const p1 = { x: startX, y: startY };
+            let p2, p3;
+            if (Math.random() > 0.5) {
+                 p2 = { x: startX + legX, y: startY }; p3 = { x: startX + legX, y: startY + legY };
+            } else {
+                 p2 = { x: startX, y: startY + legY }; p3 = { x: startX + legX, y: startY + legY };
+            }
+            targetPoints = [p1, p2, p3];
+            drawnPoints = [p1];
+        }
+
+        function getEventPos(event, canvas) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+            const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        function startMainDraw(e) {
+            e.preventDefault();
+            if (isChallengeComplete) return;
+            const pos = getEventPos(e, mainCanvas);
+            const lastDrawnPoint = drawnPoints[drawnPoints.length - 1];
+            if (Math.hypot(pos.x - lastDrawnPoint.x, pos.y - lastDrawnPoint.y) < snapRadius) {
+                isMainDrawing = true; currentDragPoint = { x: pos.x, y: pos.y };
+            }
+        }
+
+        function continueMainDraw(e) {
+            if (!isMainDrawing) return;
+            e.preventDefault();
+            const pos = getEventPos(e, mainCanvas);
+            currentDragPoint = pos;
+            const nextTarget = targetPoints[drawnPoints.length];
+            if (nextTarget && Math.hypot(pos.x - nextTarget.x, pos.y - nextTarget.y) < snapRadius) {
+                currentDragPoint = { x: nextTarget.x, y: nextTarget.y };
+            }
+        }
+
+        function endMainDraw() {
+            if (!isMainDrawing) return;
+            const nextTarget = targetPoints[drawnPoints.length];
+            if (nextTarget && currentDragPoint && Math.hypot(currentDragPoint.x - nextTarget.x, currentDragPoint.y - nextTarget.y) < snapRadius) {
+                drawnPoints.push(nextTarget);
+                if (drawnPoints.length === targetPoints.length) {
+                    isChallengeComplete = true;
+                    showDisplacementFinalCalculations();
+                }
+            }
+            isMainDrawing = false; currentDragPoint = null;
+        }
+        
+        function drawTextLabel(ctx, text, x, y, color, font = 'bold 16px Inter') {
+            ctx.font = font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            const textMetrics = ctx.measureText(text);
+            const boxHeight = 24; const boxWidth = textMetrics.width + 16;
+            const boxY = y - boxHeight - 8;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+            ctx.fillRect(x - boxWidth / 2, boxY, boxWidth, boxHeight);
+            ctx.fillStyle = color;
+            ctx.fillText(text, x, boxY + boxHeight / 2);
+        }
+        
+        function drawPathWithLabels(ctx, points, color) {
+            if (points.length < 2) return;
+            ctx.strokeStyle = color; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+            ctx.stroke();
+            for (let i = 1; i < points.length; i++) {
+                const p1 = points[i - 1], p2 = points[i];
+                const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y) * mainScaleFactor;
+                drawTextLabel(ctx, dist.toFixed(2), (p1.x + p2.x) / 2, (p1.y + p2.y) / 2, '#a5b4fc');
+            }
+        }
+        
+        function drawDisplacementWithLabel(ctx, p1, p2, color) {
+            if (!p1 || !p2) return;
+            ctx.setLineDash([10, 5]); ctx.strokeStyle = color; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+            ctx.setLineDash([]);
+            const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x), arrowSize = 15;
+            ctx.fillStyle = color;
+            ctx.beginPath(); ctx.moveTo(p2.x, p2.y);
+            ctx.lineTo(p2.x - arrowSize * Math.cos(angle - Math.PI / 6), p2.y - arrowSize * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(p2.x - arrowSize * Math.cos(angle + Math.PI / 6), p2.y - arrowSize * Math.sin(angle + Math.PI / 6));
+            ctx.fill();
+            const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y) * mainScaleFactor;
+            drawTextLabel(ctx, dist.toFixed(2), (p1.x + p2.x) / 2, (p1.y + p2.y) / 2, '#fca5a5');
+        }
+
+        function drawIcons(ctx, tPoints, dPoints) {
+            const icons = ['🏠', '📍', '🏁'], colors = ['#60a5fa', '#e5e7eb', '#f87171'];
+            tPoints.forEach((point, i) => {
+                const isDrawn = i < dPoints.length, now = Date.now();
+                const radius = isDrawn ? 8 + Math.sin(now / 200) * 2 : 12;
+                const glow = isDrawn ? 12 + Math.sin(now / 200) * 5 : (isChallengeComplete ? 20 : 0);
+                ctx.beginPath(); ctx.arc(point.x, point.y, radius, 0, 2 * Math.PI);
+                ctx.fillStyle = colors[i]; ctx.shadowColor = colors[i]; ctx.shadowBlur = glow; ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.font = '24px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(icons[i], point.x, point.y);
+                ctx.font = 'bold 14px Inter'; ctx.fillStyle = '#e5e7eb';
+                ctx.fillText(iconNames[i], point.x, point.y + 25);
+            });
+        }
+        
+        function showDisplacementFinalCalculations() {
+            if (targetPoints.length < 3) return;
+            const p1 = targetPoints[0], p2 = targetPoints[1], p3 = targetPoints[2];
+            const leg1 = Math.hypot(p2.x - p1.x, p2.y - p1.y) * mainScaleFactor;
+            const leg2 = Math.hypot(p3.x - p2.x, p3.y - p2.y) * mainScaleFactor;
+            const totalDistance = leg1 + leg2;
+            const displacement = Math.hypot(p3.x - p1.x, p3.y - p1.y) * mainScaleFactor;
+
+            displacementCalcContentEl.innerHTML = `
+                <div class="text-center flex-1 space-y-2">
+                    <h3 class="text-xl font-bold text-blue-400 mb-2">Distance (Path Taken)</h3>
+                    <p class="text-lg font-mono text-blue-200">Leg 1 + Leg 2</p>
+                    <p class="text-lg font-mono text-blue-200">${leg1.toFixed(2)} + ${leg2.toFixed(2)}</p>
+                    <p class="text-2xl font-bold font-mono text-blue-300">${totalDistance.toFixed(2)}</p>
+                </div>
+                <div class="border-t md:border-t-0 md:border-l border-gray-600"></div>
+                <div class="text-center flex-1 space-y-2">
+                    <h3 class="text-xl font-bold text-red-400 mb-2">Displacement (Direct Route)</h3>
+                    <p class="text-lg font-mono text-red-200">√ ( Leg 1² + Leg 2² )</p>
+                    <p class="text-lg font-mono text-red-200">√ ( ${leg1.toFixed(2)}² + ${leg2.toFixed(2)}² )</p>
+                    <p class="text-2xl font-bold font-mono text-red-300">${displacement.toFixed(2)}</p>
+                </div>
+            `;
+            displacementCalculationsEl.classList.remove('hidden');
+            displacementCalculationsEl.classList.add('calculation-card');
+        }
+
+        function calculateAndDisplayMain() {
+            let totalDistance = 0;
+            for (let i = 1; i < drawnPoints.length; i++) totalDistance += Math.hypot(drawnPoints[i].x - drawnPoints[i-1].x, drawnPoints[i].y - drawnPoints[i-1].y);
+            if (isMainDrawing && currentDragPoint) totalDistance += Math.hypot(currentDragPoint.x - drawnPoints[drawnPoints.length - 1].x, currentDragPoint.y - drawnPoints[drawnPoints.length - 1].y);
+            const displacementValue = (drawnPoints.length > 0) ? Math.hypot((currentDragPoint || drawnPoints[drawnPoints.length-1]).x - drawnPoints[0].x, (currentDragPoint || drawnPoints[drawnPoints.length-1]).y - drawnPoints[0].y) : 0;
+            distanceEl.textContent = (totalDistance * mainScaleFactor).toFixed(2);
+            displacementEl.textContent = (displacementValue * mainScaleFactor).toFixed(2);
+        }
+
+        function mainLoop() {
+            if (!mainCtx) return;
+            mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+            if (targetPoints.length > 0) {
+                if(isChallengeComplete) {
+                     displacementTaskEl.innerHTML = `<span class="font-bold text-green-400">Challenge Complete!</span>`;
+                }
+                drawPathWithLabels(mainCtx, drawnPoints, '#60a5fa');
+                if (isMainDrawing && currentDragPoint) {
+                     const lastPoint = drawnPoints[drawnPoints.length - 1];
+                     drawPathWithLabels(mainCtx, [lastPoint, currentDragPoint], '#60a5fa');
+                     calculateAndDisplayMain();
+                }
+                if (drawnPoints.length > 1) drawDisplacementWithLabel(mainCtx, drawnPoints[0], drawnPoints[drawnPoints.length - 1], '#f87171');
+                drawIcons(mainCtx, targetPoints, drawnPoints);
+            }
+            mainAnimFrame = requestAnimationFrame(mainLoop);
+        }
+
+        function clearMainPath() {
+            distanceEl.textContent = "0.00"; displacementEl.textContent = "0.00";
+            generateTrianglePoints();
+        }
+        
+        // --- TAB 2: 1D MOTION LAB ---
+        const oneDCanvas = document.getElementById('oneDCanvas');
+        const oneDCtx = oneDCanvas.getContext('2d');
+        const oneDDistanceEl = document.getElementById('oneD-distance');
+        const oneDDisplacementEl = document.getElementById('oneD-displacement');
+        const oneDClearBtn = document.getElementById('oneD-clearBtn');
+        const oneDTaskEl = document.getElementById('oneD-task');
+        const oneDCalculationsEl = document.getElementById('oneD-calculations');
+        const oneDCalcContentEl = document.getElementById('oneD-calc-content');
+
+        const oneDPoints = { A: 0, B: 4, C: -4, D: -2 };
+        const oneDPointLabels = Object.keys(oneDPoints);
+        let oneDChallenge = [];
+        let oneDProgress = 0;
+        let oneDWrongClickLabel = null;
+        let oneDLastCorrectLabel = null;
+        let oneDChallengeCompleted = false;
+        
+        function resizeOneDCanvas(forceNewChallenge = false) {
+            if (!oneDCanvas.parentElement || oneDCanvas.offsetWidth === 0) return;
+            oneDCanvas.width = oneDCanvas.offsetWidth;
+            oneDCanvas.height = oneDCanvas.offsetHeight;
+            if (forceNewChallenge) generateOneDChallenge();
+        }
+
+        function generateOneDChallenge() {
+            oneDProgress = 0;
+            oneDLastCorrectLabel = null;
+            oneDChallengeCompleted = false;
+            oneDCalculationsEl.classList.add('hidden');
+            let p = [...oneDPointLabels];
+            let start = p.splice(Math.floor(Math.random() * p.length), 1)[0];
+            let middle, end;
+            do { middle = p[Math.floor(Math.random() * p.length)]; } while (middle === start);
+            do { end = oneDPointLabels[Math.floor(Math.random() * oneDPointLabels.length)]; } while (end === middle);
+            
+            oneDChallenge = [start, middle, end];
+            oneDTaskEl.innerHTML = `Click the path: <span class="font-bold text-yellow-400">${oneDChallenge[0]} → ${oneDChallenge[1]} → ${oneDChallenge[2]}</span>`;
+            oneDDistanceEl.textContent = "0.00 m";
+            oneDDisplacementEl.textContent = "0.00 m";
+        }
+
+        function worldToCanvas(x) {
+            const padding = 60;
+            const range = 8;
+            const canvasWidth = oneDCanvas.width - padding * 2;
+            return padding + ((x + 4) / range) * canvasWidth;
+        }
+
+        function handleOneDClick(e) {
+            if (oneDChallengeCompleted) return;
+            const pos = getEventPos(e, oneDCanvas);
+            const yMid = oneDCanvas.height / 2;
+            const clickRadius = (worldToCanvas(1) - worldToCanvas(0)) / 2;
+
+            if (Math.abs(pos.y - yMid) > 40) return;
+
+            for (const label in oneDPoints) {
+                const x = worldToCanvas(oneDPoints[label]);
+                if (Math.abs(pos.x - x) < clickRadius) {
+                    if (label === oneDChallenge[oneDProgress]) {
+                        oneDProgress++;
+                        oneDLastCorrectLabel = label;
+                        if (oneDProgress === oneDChallenge.length) {
+                           oneDChallengeCompleted = true;
+                           showOneDFinalCalculations();
+                        }
+                    } else {
+                        oneDWrongClickLabel = label;
+                        setTimeout(() => { oneDWrongClickLabel = null; }, 300);
+                    }
+                    return;
+                }
+            }
+        }
+        
+        function drawOneDNumberLine() {
+            const y = oneDCanvas.height / 2;
+            const padding = 40;
+            oneDCtx.strokeStyle = '#9ca3af'; oneDCtx.lineWidth = 2;
+            oneDCtx.beginPath(); oneDCtx.moveTo(padding, y); oneDCtx.lineTo(oneDCanvas.width - padding, y); oneDCtx.stroke();
+            for (let i = -4; i <= 4; i++) {
+                const x = worldToCanvas(i);
+                oneDCtx.beginPath(); oneDCtx.moveTo(x, y - 10); oneDCtx.lineTo(x, y + 10); oneDCtx.stroke();
+                oneDCtx.font = '14px Inter'; oneDCtx.fillStyle = '#d1d5db'; oneDCtx.textAlign = 'center';
+                oneDCtx.fillText(`${i} m`, x, y + 30);
+            }
+        }
+
+        function drawOneDIcons() {
+            const y = oneDCanvas.height / 2;
+            for (const label in oneDPoints) {
+                const x = worldToCanvas(oneDPoints[label]);
+                let iconX = x;
+                if (oneDWrongClickLabel === label) {
+                    iconX += Math.sin(Date.now() / 15) * 5;
+                }
+                if (oneDLastCorrectLabel === label && !oneDChallengeCompleted) {
+                    oneDCtx.beginPath();
+                    const now = Date.now();
+                    const radius = 20 + Math.sin(now / 200) * 3;
+                    const glow = 15 + Math.sin(now/200) * 5;
+                    oneDCtx.arc(x, y - 30, radius, 0, 2 * Math.PI);
+                    oneDCtx.fillStyle = 'rgba(234, 179, 8, 0.3)';
+                    oneDCtx.shadowColor = '#eab308';
+                    oneDCtx.shadowBlur = glow;
+                    oneDCtx.fill();
+                    oneDCtx.shadowBlur = 0;
+                }
+                oneDCtx.font = '24px sans-serif'; oneDCtx.textAlign = 'center';
+                oneDCtx.fillText('🦆', iconX, y - 30);
+                oneDCtx.font = 'bold 16px Inter'; oneDCtx.fillStyle = '#eab308';
+                oneDCtx.fillText(label, x, y - 60);
+            }
+        }
+        
+        function drawOneDPath() {
+            if (oneDProgress < 2) return;
+            let distance = 0; let displacement = 0;
+            const startPoint = oneDChallenge[0];
+            let lastPoint = startPoint;
+
+            for (let i = 1; i < oneDProgress; i++) {
+                const currentPoint = oneDChallenge[i];
+                if (!currentPoint) break;
+                const startPos = oneDPoints[lastPoint], endPos = oneDPoints[currentPoint];
+                distance += Math.abs(endPos - startPos);
+                const startX = worldToCanvas(startPos), endX = worldToCanvas(endPos);
+                const y = oneDCanvas.height / 2 - 90 - (i-1) * 30;
+                oneDCtx.strokeStyle = '#22c55e'; oneDCtx.lineWidth = 3;
+                oneDCtx.beginPath(); oneDCtx.moveTo(startX, y); oneDCtx.lineTo(endX, y); oneDCtx.stroke();
+                const angle = endX > startX ? 0 : Math.PI; const arrowSize = 10;
+                oneDCtx.fillStyle = '#22c55e';
+                oneDCtx.beginPath(); oneDCtx.moveTo(endX, y);
+                oneDCtx.lineTo(endX - arrowSize * Math.cos(angle - Math.PI / 6), y - arrowSize * Math.sin(angle - Math.PI / 6));
+                oneDCtx.lineTo(endX - arrowSize * Math.cos(angle + Math.PI / 6), y - arrowSize * Math.sin(angle + Math.PI / 6));
+                oneDCtx.fill();
+                lastPoint = currentPoint;
+            }
+
+            const finalPoint = oneDChallenge[oneDProgress - 1];
+            displacement = oneDPoints[finalPoint] - oneDPoints[startPoint];
+            oneDDistanceEl.textContent = `${distance.toFixed(2)} m`;
+            oneDDisplacementEl.textContent = `${displacement.toFixed(2)} m`;
+
+            const startX = worldToCanvas(oneDPoints[startPoint]), endX = worldToCanvas(oneDPoints[finalPoint]);
+            const y = oneDCanvas.height / 2 + 60;
+            if (startX !== endX) {
+                oneDCtx.setLineDash([8, 4]); oneDCtx.strokeStyle = '#06b6d4'; oneDCtx.lineWidth = 4;
+                oneDCtx.beginPath(); oneDCtx.moveTo(startX, y); oneDCtx.lineTo(endX, y); oneDCtx.stroke();
+                oneDCtx.setLineDash([]);
+                const angle = endX > startX ? 0 : Math.PI; const arrowSize = 12;
+                oneDCtx.fillStyle = '#06b6d4';
+                oneDCtx.beginPath();
+                oneDCtx.moveTo(endX, y);
+                oneDCtx.lineTo(endX - arrowSize * Math.cos(angle - Math.PI / 6), y - arrowSize * Math.sin(angle - Math.PI / 6));
+                oneDCtx.lineTo(endX - arrowSize * Math.cos(angle + Math.PI / 6), y - arrowSize * Math.sin(angle + Math.PI / 6));
+                oneDCtx.fill();
+                oneDCtx.font = 'bold 12px Inter';
+                oneDCtx.fillText('START', startX, y + 20);
+                oneDCtx.fillText('END', endX, y + 20);
+            }
+        }
+        
+        function showOneDFinalCalculations() {
+            const startPointLabel = oneDChallenge[0];
+            const midPointLabel = oneDChallenge[1];
+            const endPointLabel = oneDChallenge[2];
+            const startVal = oneDPoints[startPointLabel];
+            const midVal = oneDPoints[midPointLabel];
+            const endVal = oneDPoints[endPointLabel];
+            const leg1 = Math.abs(midVal - startVal);
+            const leg2 = Math.abs(endVal - midVal);
+            const totalDistance = leg1 + leg2;
+            const displacement = endVal - startVal;
+
+            oneDCalcContentEl.innerHTML = `
+                <div class="text-center flex-1 space-y-2">
+                    <h3 class="text-xl font-bold text-green-400 mb-2">Distance (Path Taken)</h3>
+                    <p class="text-lg font-mono text-green-200">| ${midVal}m - ${startVal}m | + | ${endVal}m - ${midVal}m |</p>
+                    <p class="text-lg font-mono text-green-200">${leg1}m + ${leg2}m</p>
+                    <p class="text-2xl font-bold font-mono text-green-300">${totalDistance.toFixed(2)} m</p>
+                </div>
+                <div class="border-t md:border-t-0 md:border-l border-gray-600"></div>
+                <div class="text-center flex-1 space-y-2">
+                    <h3 class="text-xl font-bold text-cyan-400 mb-2">Displacement (Direct Route)</h3>
+                    <p class="text-lg font-mono text-cyan-200">Position<sub class="text-xs">final</sub> - Position<sub class="text-xs">initial</sub></p>
+                    <p class="text-lg font-mono text-cyan-200">${endVal}m - ${startVal}m</p>
+                    <p class="text-2xl font-bold font-mono text-cyan-300">${displacement.toFixed(2)} m</p>
+                </div>
+            `;
+            oneDCalculationsEl.classList.remove('hidden');
+            oneDCalculationsEl.classList.add('calculation-card');
+        }
+
+        function oneDLoop() {
+            if (!oneDCtx) return;
+            oneDCtx.clearRect(0, 0, oneDCanvas.width, oneDCanvas.height);
+            drawOneDNumberLine();
+            drawOneDIcons();
+            drawOneDPath();
+            if (oneDChallengeCompleted) {
+                oneDTaskEl.innerHTML = `<span class="font-bold text-green-400">Challenge Complete!</span>`;
+            }
+            oneDAnimFrame = requestAnimationFrame(oneDLoop);
+        }
+
+        // --- GLOBAL EVENT LISTENERS & INIT ---
+        window.addEventListener('resize', () => {
+            if (tab1Btn.classList.contains('active')) resizeMainCanvas(true);
+            if (tab2Btn.classList.contains('active')) resizeOneDCanvas(true);
+        });
+        clearBtn.addEventListener('click', () => resizeMainCanvas(true));
+        mainCanvas.addEventListener('mousedown', startMainDraw);
+        mainCanvas.addEventListener('mousemove', continueMainDraw);
+        document.addEventListener('mouseup', endMainDraw);
+        mainCanvas.addEventListener('touchstart', startMainDraw, { passive: false });
+        mainCanvas.addEventListener('touchmove', continueMainDraw, { passive: false });
+        document.addEventListener('touchend', endMainDraw);
+
+        oneDClearBtn.addEventListener('click', () => resizeOneDCanvas(true));
+        oneDCanvas.addEventListener('click', handleOneDClick);
+        
+        window.onload = function() {
+            switchTab(1);
+        };
+    </script>
+</body>
+</html>
+
